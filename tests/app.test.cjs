@@ -18,16 +18,16 @@ function page(endpoint='https://script.google.com/macros/s/PILOT/exec') {
 test('unconfigured pilot boots locked with no invented inventory',()=>{
  const p=page('');assert.equal(p.elements.get('inventory').hidden,true);assert.equal(p.elements.get('leftN').textContent,'—');assert.equal(p.elements.get('unlockBtn').disabled,true);
 });
-test('export exposes a persistent download link and removes it on lock',async()=>{
+test('export exposes a persistent download link and removes it on logout',async()=>{
  const p=page();await p.unlock();await p.elements.get('exportBtn').onclick();
  assert.equal(p.elements.get('exportDownload').hidden,false);
  assert.equal(p.elements.get('exportDownload').href,'blob:test-backup');
  assert.match(p.elements.get('exportStatus').textContent,/Backup ready/);
- p.elements.get('lockBtn').onclick();assert.equal(p.elements.get('exportDownload').hidden,true);
+ p.elements.get('logoutBtn').onclick();assert.equal(p.elements.get('exportDownload').hidden,true);
 });
-test('UI unlocks, records a sale, voids by ID, and locks again',async()=>{
+test('UI unlocks, records a sale, voids by ID, and logs out',async()=>{
  const p=page();await p.unlock();assert.equal(p.elements.get('inventory').hidden,false);assert.equal(p.elements.get('passphrase').value,'');
  await vm.runInContext("sell('pink','S')",p.c);assert.equal(p.elements.get('soldN').textContent,1);
  const row=p.elements.get('saleLog').children[0];await row.children[0].onclick();assert.equal(p.elements.get('soldN').textContent,0);
- p.elements.get('lockBtn').onclick();assert.equal(p.elements.get('inventory').hidden,true);assert.equal(p.elements.get('leftN').textContent,'—');
+ p.elements.get('logoutBtn').onclick();assert.equal(p.elements.get('inventory').hidden,true);assert.equal(p.elements.get('leftN').textContent,'—');
 });

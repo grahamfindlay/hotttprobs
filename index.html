@@ -135,6 +135,7 @@
   }
   .action:active{background:var(--panel-2)}
   .action.warn{color:var(--pink); border-color:#4A2233}
+  .action.quiet{color:var(--dim); background:transparent; margin-top:32px}
 
   /* ---- undo toast ---- */
   #toast{
@@ -187,7 +188,6 @@
 <button class="action" id="unlockBtn">Unlock inventory</button>
 <p class="hint" id="setupHint">Connect before recording sales. Unconfirmed saves can be retried safely.</p>
 </form>
-<button id="lockBtn" class="action" hidden>Lock inventory</button>
 <main id="inventory" hidden>
 <section class="view on" id="v-sell">
   <div class="band">
@@ -220,6 +220,7 @@
     <p class="hint" id="exportStatus" role="status"></p>
     <a class="action" id="exportDownload" hidden>Download backup (.json)</a>
     <p class="hint">Closing out starts a new sales list. Past sales stay in the activity log; stock counts stay put.</p>
+    <button id="logoutBtn" class="action quiet">Log out</button>
   </div>
 </section>
 
