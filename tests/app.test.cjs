@@ -5,9 +5,10 @@ function page(endpoint='https://script.google.com/macros/s/PILOT/exec') {
  const html=fs.readFileSync('index.html','utf8');for(const match of html.matchAll(/id="([^"]+)"/g))elements.set(match[1],element());
  const map=new Map();const localStorage={get length(){return map.size},key:i=>[...map.keys()][i],getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};
  let events,sequence=0;
- const c=vm.createContext({HP_CONFIG:{endpoint,label:'Pilot'},localStorage,AbortController,setTimeout,clearTimeout,setInterval(){},console,navigator:{onLine:true},window:{addEventListener(){},scrollTo(){}},document:{getElementById:id=>elements.get(id),createElement:element,querySelectorAll:()=>[],addEventListener(){},visibilityState:'visible'},crypto:{randomUUID:()=>String(++sequence).padStart(16,'0')},confirm:()=>true,fetch:async(url,options)=>{
+ const c=vm.createContext({HP_CONFIG:{endpoint,label:'Pilot'},localStorage,AbortController,Blob,URL:{createObjectURL:()=> 'blob:test-backup',revokeObjectURL(){}},setTimeout,clearTimeout,setInterval(){},console,navigator:{onLine:true},window:{addEventListener(){},scrollTo(){}},document:{getElementById:id=>elements.get(id),createElement:element,querySelectorAll:()=>[],addEventListener(){},visibilityState:'visible'},crypto:{randomUUID:()=>String(++sequence).padStart(16,'0')},confirm:()=>true,fetch:async(url,options)=>{
  const req=JSON.parse(options.body);let result={ok:true};
  if(req.action==='apply'){const planned=c.Inventory.plan(events,req.operation,10);events.push(planned.event);result.ack=req.operation.id;}
+ if(req.action==='export')result.events=events;
  result.state=c.Inventory.replay(events);return {ok:true,json:async()=>JSON.parse(JSON.stringify(result))};
  }});
  for(const file of ['apps-script/Inventory.js','sync.js','app.js'])vm.runInContext(fs.readFileSync(file,'utf8'),c);
@@ -16,6 +17,13 @@ function page(endpoint='https://script.google.com/macros/s/PILOT/exec') {
 }
 test('unconfigured pilot boots locked with no invented inventory',()=>{
  const p=page('');assert.equal(p.elements.get('inventory').hidden,true);assert.equal(p.elements.get('leftN').textContent,'—');assert.equal(p.elements.get('unlockBtn').disabled,true);
+});
+test('export exposes a persistent download link and removes it on lock',async()=>{
+ const p=page();await p.unlock();await p.elements.get('exportBtn').onclick();
+ assert.equal(p.elements.get('exportDownload').hidden,false);
+ assert.equal(p.elements.get('exportDownload').href,'blob:test-backup');
+ assert.match(p.elements.get('exportStatus').textContent,/Backup ready/);
+ p.elements.get('lockBtn').onclick();assert.equal(p.elements.get('exportDownload').hidden,true);
 });
 test('UI unlocks, records a sale, voids by ID, and locks again',async()=>{
  const p=page();await p.unlock();assert.equal(p.elements.get('inventory').hidden,false);assert.equal(p.elements.get('passphrase').value,'');

@@ -1,6 +1,6 @@
 "use strict";
 const {SIZES,STYLES} = Inventory;
-let state=null, sel=STYLES[0].id, selSize='S';
+let state=null, sel=STYLES[0].id, selSize='S', exportUrl=null;
 const byId=id=>document.getElementById(id);
 const client=new MerchSync({endpoint:HP_CONFIG.endpoint,storage:localStorage,fetcher:fetch,uuid:()=>crypto.randomUUID(),onChange:update});
 function canEdit(){return navigator.onLine && client.ready();}
@@ -20,6 +20,10 @@ function update(){
  byId('closeBtn').disabled=!canEdit() || !state?.sales.length;
  byId('exportBtn').disabled=!canEdit();
  byId('copyBtn').disabled=!state;
+ if(!state){
+   if(exportUrl){URL.revokeObjectURL(exportUrl);exportUrl=null;}
+   byId('exportDownload').hidden=true;byId('exportStatus').textContent='';
+ }
 }
 /* ---------- helpers ---------- */
 const styleById = id => STYLES.find(s=>s.id===id);
@@ -146,10 +150,15 @@ byId('copyBtn').onclick=async()=>{
   setTimeout(()=>byId('copyBtn').textContent='Copy the recap',2000);
 };
 byId('exportBtn').onclick=async()=>{
+  byId('exportDownload').hidden=true;
+  byId('exportStatus').textContent='Preparing backup…';
   try {
-    const data=await client.exportLog();const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
-    const a=document.createElement('a');a.href=url;a.download='hp-inventory-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-  }catch(err){client.message=err.message;client.emit();}
+    const data=await client.exportLog();
+    if(exportUrl)URL.revokeObjectURL(exportUrl);
+    exportUrl=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+    const a=byId('exportDownload');a.href=exportUrl;a.download='hp-inventory-'+new Date().toISOString().slice(0,10)+'.json';a.hidden=false;
+    byId('exportStatus').textContent='Backup ready. Use the download link below.';
+  }catch(err){byId('exportStatus').textContent=err.message;}
 };
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-current',x===b));

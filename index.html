@@ -131,7 +131,7 @@
   .action{
     display:block; width:100%; margin-top:16px; padding:14px;
     border:1px solid var(--line); border-radius:12px; background:var(--panel);
-    font-weight:600; font-size:15px; text-align:center;
+    color:var(--chalk); font-weight:600; font-size:15px; text-align:center; text-decoration:none;
   }
   .action:active{background:var(--panel-2)}
   .action.warn{color:var(--pink); border-color:#4A2233}
@@ -217,6 +217,8 @@
     <button class="action" id="copyBtn">Copy the recap</button>
     <button class="action warn" id="closeBtn">Close out the night</button>
     <button class="action" id="exportBtn">Export inventory and history</button>
+    <p class="hint" id="exportStatus" role="status"></p>
+    <a class="action" id="exportDownload" hidden>Download backup (.json)</a>
     <p class="hint">Closing out starts a new sales list. Past sales stay in the activity log; stock counts stay put.</p>
   </div>
 </section>
