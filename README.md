@@ -25,9 +25,11 @@ Run `npm run preview` for a local preview at http://127.0.0.1:4173. This serves 
 
 Edits require connectivity. Buttons wait for acknowledgment. Pending requests are stored synchronously in browser localStorage before sending, scoped to the exact backend URL, with no passphrase stored alongside them. Retry and reload reuse the same operation ID. Do not clear browser storage when a save is unconfirmed.
 
-The passphrase remains in memory until locking or closing/reloading the page. Every API operation checks it on the server. Use a long random passphrase. This is simple shared-secret protection; it provides no individual attribution, account recovery, or robust protection from public-endpoint quota exhaustion.
+The passphrase remains in memory until logging out or closing/reloading the page. Every API operation checks it on the server. Use a long random passphrase. This is simple shared-secret protection; it provides no individual attribution, account recovery, or robust protection from public-endpoint quota exhaustion.
 
 Each accepted action is a single JSON row in an append-only Sheet log. Under a script lock, the server reconstructs stock, deduplicates the ID, validates the operation, appends one row, and flushes before acknowledging. Retrying after an ambiguous write checks the log first. There is no separately updated stock table that can fall out of sync. All writers must use this one script project; two projects accessing the same Sheet would have separate locks.
+
+Stock steppers edit a local draft immediately. **Save stock** sends all displayed changes as one relative batch, so one recount needs one Apps Script request and concurrent sales are preserved. The server validates the complete batch before appending it; a rejected batch changes no counts. Unsaved drafts live only in the open page, which warns before navigation. Once a save is queued, its operation is durable in browser storage and safe to retry.
 
 Voids reference unique sale IDs. Closing a gig creates a new gig ID while keeping prior events. Delayed actions for a closed gig are rejected and shown to the user. Export downloads the full log, which reconstructs inventory and gig history.
 

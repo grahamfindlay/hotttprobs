@@ -49,6 +49,17 @@ function operation(raw) {
       if (raw.delta !== 1 && raw.delta !== -1) fail('INVALID','Adjust by one item at a time.');
       op.delta = raw.delta;
     }
+  } else if (op.type === 'adjustBatch') {
+    if (!Array.isArray(raw.changes) || raw.changes.length < 1 || raw.changes.length > STYLES.length * SIZES.length) fail('INVALID','Invalid stock changes.');
+    const seen = new Set();
+    op.changes = raw.changes.map(change => {
+      if (!change || !STYLES.some(s=>s.id === change.styleId) || !SIZES.includes(change.size)) fail('INVALID','Unknown shirt or size.');
+      if (!Number.isSafeInteger(change.delta) || change.delta === 0 || Math.abs(change.delta) > 1000000) fail('INVALID','Invalid stock adjustment.');
+      const key = change.styleId + ':' + change.size;
+      if (seen.has(key)) fail('INVALID','Duplicate stock change.');
+      seen.add(key);
+      return {styleId:change.styleId, size:change.size, delta:change.delta};
+    });
   } else if (op.type === 'void') {
     if (typeof raw.saleId !== 'string') fail('INVALID','Missing sale ID.');
     op.saleId = raw.saleId;
@@ -64,6 +75,16 @@ function apply(state, op, t) {
     if (n > 1000000) fail('INVALID','Inventory limit reached.');
     state.stock[op.styleId][op.size] = n;
     if (op.type === 'sale') state.sales.push({id:op.id, t, styleId:op.styleId, size:op.size});
+  } else if (op.type === 'adjustBatch') {
+    // Validate every relative change before mutating anything. The whole recount
+    // is accepted as one event or rejected without a partial stock update.
+    const next = op.changes.map(change => {
+      const n = state.stock[change.styleId][change.size] + change.delta;
+      if (!Number.isSafeInteger(n) || n < 0) fail('OUT_OF_STOCK','One or more changes would make stock negative. Review the refreshed inventory.');
+      if (n > 1000000) fail('INVALID','Inventory limit reached.');
+      return {styleId:change.styleId, size:change.size, quantity:n};
+    });
+    next.forEach(change => state.stock[change.styleId][change.size] = change.quantity);
   } else if (op.type === 'void') {
     const i = state.sales.findIndex(s=>s.id === op.saleId);
     if (i < 0) fail('SALE_CHANGED','That sale was already voided or belongs to a closed gig.');

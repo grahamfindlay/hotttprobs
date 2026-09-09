@@ -4,6 +4,7 @@ var MerchSync = class {
     this.endpoint=endpoint;this.storage=storage;this.fetcher=(...args)=>fetcher(...args);this.uuid=uuid;this.onChange=onChange;
     this.prefix='hp-pilot-v2:pending:'+encodeURIComponent(endpoint)+':';
     this.passphrase='';this.state=null;this.busy=false;this.healthy=false;this.message='Unlock to load inventory.';
+    this.lastSubmissionId='';this.lastAcknowledged='';this.lastRejected='';
   }
   pending() {
     const result=[];
@@ -38,9 +39,9 @@ var MerchSync = class {
       const entries=this.pending();
       for(const entry of entries) {
         const result=await this.request('apply',entry.op);
-        if(result.ok) {this.accept(result.state);this.storage.removeItem(entry.key);}
+        if(result.ok) {this.accept(result.state);this.storage.removeItem(entry.key);this.lastAcknowledged=entry.op.id;}
         else if(result.definitive && result.state) {
-          this.accept(result.state);this.storage.removeItem(entry.key);this.healthy=true;this.message=result.message;return;
+          this.accept(result.state);this.storage.removeItem(entry.key);this.lastRejected=entry.op.id;this.healthy=true;this.message=result.message;return;
         } else {throw Error(result.message || 'Save not confirmed. Retry.');}
       }
       if(entries.length) {
@@ -59,10 +60,11 @@ var MerchSync = class {
   async submit(action) {
     if(!this.ready())return false;
     const op=Inventory.operation({...action,id:this.uuid(),gigId:this.state.gigId});
+    this.lastSubmissionId=op.id;this.lastAcknowledged='';this.lastRejected='';
     try {this.storage.setItem(this.prefix+op.id,JSON.stringify(op));}
     catch(_) {this.healthy=false;this.message='Browser storage is unavailable. No action was sent.';this.emit();return false;}
     await this.refresh();
-    return this.healthy && this.state && (action.type!=='sale' || this.state.sales.some(s=>s.id===op.id));
+    return this.lastAcknowledged===op.id;
   }
   async exportLog() {
     if(!this.ready())throw Error('Refresh inventory before exporting.');

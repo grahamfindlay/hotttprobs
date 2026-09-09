@@ -110,15 +110,29 @@
   }
   .stepper button:active{background:var(--panel-2)}
   .stepper .val{width:42px; text-align:center; font-family:var(--cond); font-weight:700; font-size:26px}
+  .stepper .val.changed{color:var(--yellow)}
+  .stepper .val.invalid{color:var(--pink)}
   .sizehead{display:flex; gap:8px; overflow-x:auto; margin:0 -14px 6px; padding:0 14px 8px; scrollbar-width:none}
   .sizehead::-webkit-scrollbar{display:none}
   .sizehead button{
-    flex:0 0 auto; padding:7px 13px; border-radius:8px; background:var(--panel);
+    flex:0 0 auto; padding:7px 13px; border-radius:8px; background:var(--panel); position:relative;
     border:1px solid var(--line); font-family:var(--cond); font-weight:600; font-size:17px;
   }
   .sizehead button[aria-pressed="true"]{background:var(--chalk); color:var(--ink); border-color:var(--chalk)}
+  .draft-badge{display:inline-block; min-width:17px; margin-left:5px; padding:1px 4px; border-radius:9px; background:var(--yellow); color:var(--ink); font:700 11px/1.35 var(--body)}
   .totals{display:flex; gap:22px; padding:14px 2px 2px; font-size:14px; color:var(--dim)}
   .totals b{font-family:var(--cond); font-weight:700; font-size:26px; color:var(--chalk); display:block; line-height:1.1}
+  .stock-draft{
+    position:sticky; bottom:calc(70px + env(safe-area-inset-bottom)); z-index:4;
+    margin:18px -4px 4px; padding:12px; border:1px solid #6B5928; border-radius:12px;
+    background:#292416; box-shadow:0 10px 28px rgba(0,0,0,.45);
+  }
+  .stock-draft strong{font-family:var(--cond); font-size:18px; color:var(--yellow)}
+  .stock-draft p{margin:3px 0 10px; color:var(--chalk); font-size:13px; line-height:1.35}
+  .stock-draft-actions{display:flex; gap:8px}
+  .stock-draft-actions button{padding:10px 12px; border-radius:9px; border:1px solid var(--line); font-weight:600}
+  .stock-draft-actions .discard{color:var(--dim)}
+  .stock-draft-actions .save{flex:1; background:var(--yellow); border-color:var(--yellow); color:var(--ink)}
 
   /* ---- night log ---- */
   .sale{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); font-size:15px}
@@ -162,6 +176,7 @@
     color:var(--dim);
   }
   nav button[aria-current="true"]{background:var(--panel); color:var(--chalk)}
+  nav button.has-draft{color:var(--yellow)}
   .view{display:none}
   .view.on{display:block}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -205,7 +220,15 @@
     <div class="sizehead" id="sizeHead"></div>
     <div id="stockRows"></div>
     <div class="totals" id="stockTotals"></div>
-    <p class="hint">Adjusting here doesn't touch tonight's sales — use it for restocks and recounts.</p>
+    <p class="hint">Changes here stay on this screen until you save them. They don't alter tonight's sales.</p>
+    <div class="stock-draft" id="stockDraftBar" hidden>
+      <strong id="stockDraftTitle">Unsaved stock changes</strong>
+      <p id="stockDraftSummary" aria-live="polite"></p>
+      <div class="stock-draft-actions">
+        <button class="discard" id="stockDiscardBtn">Discard</button>
+        <button class="save" id="stockSaveBtn">Save stock</button>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -228,7 +251,7 @@
 
 <nav>
   <button data-view="sell" aria-current="true">Sell</button>
-  <button data-view="stock">Stock</button>
+  <button data-view="stock" id="stockNavBtn">Stock</button>
   <button data-view="night">Night</button>
 </nav>
 

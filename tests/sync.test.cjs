@@ -13,6 +13,7 @@ let seq=0;
 function client(s,store=storage()){return new Sync({endpoint,storage:store,fetcher:s.fetcher,uuid:()=>String(++seq).padStart(16,'0')});}
 const unlock=c=>c.unlock('test passphrase only');
 const sale={type:'sale',styleId:'pink',size:'S'};
+const stockBatch={type:'adjustBatch',changes:[{styleId:'pink',size:'S',delta:2},{styleId:'dinot',size:'M',delta:-1}]};
 test('native fetch is invoked as a function, not as a client instance method',async()=>{
  const s=server();const c=new Sync({endpoint,storage:storage(),uuid:()=>'',fetcher:async function(url,options){
   'use strict';assert.equal(this,undefined);return s.fetcher(url,options);
@@ -49,6 +50,16 @@ test('a second edit is blocked while an upload is in flight',async()=>{
 test('a successful edit uses its acknowledged state without a second read',async()=>{
  const s=server(),c=client(s);await unlock(c);await c.submit(sale);
  assert.deepEqual(s.calls.map(r=>r.action),['read','apply']);assert.equal(c.message,'Saved');
+});
+test('a stock draft saves as one acknowledged request',async()=>{
+ const s=server(),c=client(s);await unlock(c);const saved=await c.submit(stockBatch);
+ assert.equal(saved,true);assert.equal(s.events.length,2);assert.equal(s.events[1].type,'adjustBatch');
+ assert.equal(c.state.stock.pink.S,7);assert.equal(c.state.stock.dinot.M,6);assert.deepEqual(s.calls.map(r=>r.action),['read','apply']);
+});
+test('a definitively rejected stock draft reports failure and can be edited again',async()=>{
+ const s=server(),c=client(s);await unlock(c);const saved=await c.submit({type:'adjustBatch',changes:[{styleId:'pink',size:'S',delta:-6}]});
+ assert.equal(saved,false);assert.equal(c.lastRejected,c.lastSubmissionId);assert.equal(c.pending().length,0);
+ assert.equal(c.state.stock.pink.S,5);assert.match(c.message,/negative/);
 });
 test('browser storage failure prevents sending a sale',async()=>{
  const s=server(),c=client(s);await unlock(c);c.storage.setItem=()=>{throw Error('quota')};await c.submit(sale);
