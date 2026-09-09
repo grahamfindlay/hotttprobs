@@ -31,7 +31,7 @@ Each accepted action is a single JSON row in an append-only Sheet log. Under a s
 
 Voids reference unique sale IDs. Closing a gig creates a new gig ID while keeping prior events. Delayed actions for a closed gig are rejected and shown to the user. Export downloads the full log, which reconstructs inventory and gig history.
 
-The pilot reads/replays the full log on each request and polls every 30 seconds while visible and unlocked. This deliberately favors auditability over scaling; measure latency and quota use in the pilot before relying on it for many gigs. Do not edit the Events sheet directly. Keep exports before migration and after each gig.
+The pilot reads/replays the full log on each request. Reads do not take the write lock, and a successful edit uses the authoritative state returned by that write instead of making a second request. The app refreshes when unlocked, when it returns to the foreground, when connectivity returns, or when someone taps **Sync now**; it does not poll in the background. This deliberately favors auditability and usable write latency over instant passive updates. Do not edit the Events sheet directly. Keep exports before migration and after each gig, and measure latency and quota use before relying on it for many gigs.
 
 ## Verification status
 

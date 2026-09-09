@@ -15,27 +15,32 @@ function doPost(e) {
     if (!secret || secret.length < 16) return json_({ok:false,code:'SETUP',message:'The owner must configure the pilot passphrase.'});
     if (!req || typeof req.passphrase !== 'string' || !sameSecret_(req.passphrase,secret)) return json_({ok:false,code:'AUTH',message:'Incorrect passphrase.'});
     if (!['read','apply','export'].includes(req.action)) return json_({ok:false,code:'INVALID',definitive:true,message:'Unknown request.'});
-    lock = LockService.getScriptLock();
-    if (!lock.tryLock(10000)) return json_({ok:false,code:'BUSY',message:'Another save is in progress. Retry in a moment.'});
     const id = props.getProperty('SHEET_ID');
     if (!id) return json_({ok:false,code:'SETUP',message:'The owner must run setupPilot first.'});
     const sheet = SpreadsheetApp.openById(id).getSheetByName('Events');
+    if (req.action !== 'apply') {
+      // Reads return a coherent prefix of the append-only log. They do not need
+      // to queue behind saves, and an older response cannot replace newer state
+      // in the browser because state versions are monotonic.
+      const events = readEvents_(sheet);
+      const state = Inventory.replay(events);
+      return json_(req.action === 'export' ? {ok:true,state,events} : {ok:true,state});
+    }
+    lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) return json_({ok:false,code:'BUSY',message:'Another save is in progress. Retry in a moment.'});
     const events = readEvents_(sheet);
     // Validate stored data separately: errors here must never acknowledge a pending action.
     let state = Inventory.replay(events);
-    if (req.action === 'apply') {
-      let result;
-      try { result = Inventory.plan(events,req.operation,Date.now()); }
-      catch (err) { return json_({ok:false,code:err.code || 'INVALID',definitive:true,message:err.message,state}); }
-      if (result.event) {
-        // One authoritative write. No separate stock table/counter to get out of step.
-        sheet.getRange(sheet.getLastRow()+1,1).setValue(JSON.stringify(result.event));
-        SpreadsheetApp.flush();
-      }
-      state = result.state;
-      return json_({ok:true,state,ack:req.operation.id});
+    let result;
+    try { result = Inventory.plan(events,req.operation,Date.now()); }
+    catch (err) { return json_({ok:false,code:err.code || 'INVALID',definitive:true,message:err.message,state}); }
+    if (result.event) {
+      // One authoritative write. No separate stock table/counter to get out of step.
+      sheet.getRange(sheet.getLastRow()+1,1).setValue(JSON.stringify(result.event));
+      SpreadsheetApp.flush();
     }
-    return json_(req.action === 'export' ? {ok:true,state,events} : {ok:true,state});
+    state = result.state;
+    return json_({ok:true,state,ack:req.operation.id});
   } catch (_) {
     // Do not expose credentials, request bodies, internal errors, or partial-write guesses.
     return json_({ok:false,code:'TEMPORARY',message:'Could not confirm the result. Retry the same action.'});
@@ -48,8 +53,10 @@ function sameSecret_(a,b) {
   return difference===0;
 }
 function readEvents_(sheet) {
-  if (!sheet || sheet.getLastRow() < 2) throw Error('Missing log.');
-  return sheet.getRange(2,1,sheet.getLastRow()-1,1).getValues().map(row=>JSON.parse(row[0]));
+  if (!sheet) throw Error('Missing log.');
+  const lastRow=sheet.getLastRow();
+  if (lastRow < 2) throw Error('Missing log.');
+  return sheet.getRange(2,1,lastRow-1,1).getValues().map(row=>JSON.parse(row[0]));
 }
 // Run manually in the Apps Script editor. Does not replace an existing log.
 function setupPilot() {

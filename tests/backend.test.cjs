@@ -21,6 +21,7 @@ test('uncertain write failure is safely retried without a second row',()=>{
 });
 test('lock contention never proceeds with a write',()=>{
  const b=backend();b.flags.busy=true;assert.equal(request(b).code,'BUSY');assert.equal(b.writes,0);
+ assert.equal(request(b,'read').ok,true);assert.equal(request(b,'export').events.length,1);
 });
 test('corrupt persisted data produces a retryable failure, not a definitive rejection',()=>{
  const b=backend();b.rows[1]=['bad json'];const result=request(b);assert.equal(result.code,'TEMPORARY');assert.equal(result.definitive,undefined);assert.equal(b.writes,0);

@@ -169,7 +169,6 @@ window.addEventListener('offline',update);
 window.addEventListener('online',()=>client.refresh());
 window.addEventListener('storage',()=>client.refresh());
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')client.refresh();});
-setInterval(()=>{if(document.visibilityState==='visible' && navigator.onLine)client.refresh();},30000);
 byId('pilotLabel').textContent=HP_CONFIG.label;
 if(!HP_CONFIG.endpoint){byId('setupHint').textContent='Pilot setup is in progress. The owner needs to connect the new backend.';byId('unlockBtn').disabled=true;}
 update();

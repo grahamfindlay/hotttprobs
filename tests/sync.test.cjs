@@ -46,6 +46,10 @@ test('a second edit is blocked while an upload is in flight',async()=>{
  const first=c.submit(sale);assert.equal(c.ready(),false);await c.submit(sale);release();await first;
  assert.equal(s.events.length,2);assert.equal(c.state.stock.pink.S,4);
 });
+test('a successful edit uses its acknowledged state without a second read',async()=>{
+ const s=server(),c=client(s);await unlock(c);await c.submit(sale);
+ assert.deepEqual(s.calls.map(r=>r.action),['read','apply']);assert.equal(c.message,'Saved');
+});
 test('browser storage failure prevents sending a sale',async()=>{
  const s=server(),c=client(s);await unlock(c);c.storage.setItem=()=>{throw Error('quota')};await c.submit(sale);
  assert.equal(s.events.length,1);assert.equal(c.ready(),false);assert.match(c.message,/No action was sent/);
