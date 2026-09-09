@@ -15,7 +15,7 @@
 - GitHub Pages deployed successfully from the manual `Publish pilot to GitHub Pages` workflow. A fresh public page hid inventory, and an incorrect passphrase returned no data.
 - Safari generated and downloaded `hp-inventory-2026-09-09.json`. A post-closeout export contained seven events, ended with a `close` event, contained no passphrase field, and replayed through `Inventory.replay` to 131 items and zero active sales, matching the live app.
 - The owner explicitly approved the live closeout test. Closing the sample gig cleared its one active sale for everyone and preserved the resulting stock count of 131. Prior activity remained in the export.
-- Locking the public app hid both inventory totals and the active-sales view and cleared the in-memory authenticated session.
+- Logging out of the public app hid both inventory totals and the active-sales view and cleared the in-memory authenticated session.
 - Concurrent real browsers, actual phone testing, failure/retry cases, clipboard behavior, and a copied-Sheet handoff rehearsal remain pending.
 - No requests were sent to the band's original Apps Script backend.
 

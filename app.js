@@ -9,11 +9,10 @@ function update(){
  byId('syncMsg').textContent=client.busy?'Checking and saving…':(!navigator.onLine?'Offline — reconnect before editing.':client.message);
  byId('syncBar').className=client.busy?'busy':client.healthy && navigator.onLine?'ok':'bad';
  byId('syncNow').disabled=client.busy || !client.passphrase || !navigator.onLine;
- byId('lockBtn').disabled=client.busy;
+ byId('logoutBtn').disabled=client.busy;
  byId('unlockBtn').disabled=client.busy || !HP_CONFIG.endpoint;
  byId('inventory').hidden=!state;
  byId('unlockForm').hidden=!!state;
- byId('lockBtn').hidden=!state;
  byId('soldN').textContent=state?state.sales.length:'—';
  byId('leftN').textContent=state?grandTotal():'—';
  if(state)render();
@@ -136,7 +135,7 @@ byId('unlockForm').onsubmit=async e=>{
   e.preventDefault();const input=byId('passphrase');const value=input.value;input.value='';
   await client.unlock(value);
 };
-byId('lockBtn').onclick=()=>client.lock();
+byId('logoutBtn').onclick=()=>client.logout();
 byId('syncNow').onclick=()=>client.refresh();
 byId('closeBtn').onclick=async()=>{
   if(canEdit() && confirm('Close this gig for everyone? Its sales will remain in the exported history.'))await client.submit({type:'close'});

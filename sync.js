@@ -30,7 +30,7 @@ var MerchSync = class {
   }
   accept(state) {if(state && (!this.state || state.version>=this.state.version))this.state=state;}
   async unlock(passphrase) {this.passphrase=passphrase;return this.refresh();}
-  lock() {if(this.busy)return;this.passphrase='';this.state=null;this.healthy=false;this.message='Locked. Pending actions, if any, will retry after unlocking.';this.emit();}
+  logout() {if(this.busy)return;this.passphrase='';this.state=null;this.healthy=false;this.message='Logged out. Pending actions, if any, will retry after signing in again.';this.emit();}
   async refresh() {
     if(this.busy || !this.passphrase)return;
     this.busy=true;this.emit();

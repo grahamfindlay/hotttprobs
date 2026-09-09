@@ -12,7 +12,7 @@ Use only the new pilot deployment and sample inventory. Node tests must pass fir
 - [ ] Offline: already-open app disables new edits. A failed refresh does not display a successful save status. Reconnect refreshes normally.
 - [ ] Close a gig on one device while another still shows it: an old-gig action is rejected with a visible message; history remains in export.
 - [ ] Export: save JSON, reconstruct with `Inventory.replay(export.events)`, compare stock and active sales to the app. Verify the copied Sheet independently in a second isolated deployment as a handoff rehearsal.
-- [x] Lock and reload: inventory hides and passphrase must be entered again. A frontend deployment never resets the Sheet.
+- [x] Log out and reload: inventory hides and passphrase must be entered again. A frontend deployment never resets the Sheet.
 - [ ] Latency: time reads and saves on venue-like connectivity. Expand the sample log and repeat before adopting the full-log replay approach for extended use.
 
 If the browser cannot read Apps Script responses, keep the pilot blocked until that is resolved. Serving the frontend through Apps Script HTML Service is a possible fallback, but is not implemented here. Never treat an opaque response as confirmation.
