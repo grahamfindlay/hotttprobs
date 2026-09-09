@@ -10,6 +10,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 
 <style>
+  [hidden]{display:none!important}
+  button:disabled{cursor:default;opacity:.4}
+  input{display:block;width:100%;padding:12px;margin-top:8px;background:var(--panel);color:var(--chalk);border:1px solid var(--line);border-radius:8px;font:inherit}
+  #pilotLabel{color:var(--yellow);padding-top:12px;margin:0}
+
   :root{
     --ink:#161215;
     --panel:#221C21;
@@ -161,26 +166,35 @@
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
+<p id="pilotLabel"></p>
 <header>
   <div>
-    <div class="tally" id="soldN">0</div>
+    <div class="tally" id="soldN">—</div>
     <div class="tally-unit">sold tonight</div>
   </div>
   <div class="remain">
-    <b id="leftN">132</b>
+    <b id="leftN">—</b>
     <span>left in the tubs</span>
   </div>
 </header>
 
 <!-- ============ SELL ============ -->
-<div id="syncBar" hidden><span id="syncDot"></span><span id="syncMsg">Not synced</span><button id="syncNow">Sync now</button></div>
+<div id="syncBar" role="status" aria-live="polite"><span id="syncDot"></span><span id="syncMsg">Not synced</span><button id="syncNow">Sync now</button></div>
 
+<form id="unlockForm" class="band">
+<label for="passphrase">Band passphrase</label>
+<input id="passphrase" type="password" autocomplete="current-password" required>
+<button class="action" id="unlockBtn">Unlock inventory</button>
+<p class="hint" id="setupHint">Connect before recording sales. Unconfirmed saves can be retried safely.</p>
+</form>
+<button id="lockBtn" class="action" hidden>Lock inventory</button>
+<main id="inventory" hidden>
 <section class="view on" id="v-sell">
   <div class="band">
     <h2>What are they buying</h2>
     <div class="chips" id="styleChips"></div>
     <div class="sizes" id="sizeGrid"></div>
-    <p class="hint">Tap a size to ring up one. Undo pops up right after.</p>
+    <p class="hint">Tap a size to record one sale. Void mistakes in Night.</p>
   </div>
 </section>
 
@@ -202,11 +216,12 @@
     <div id="saleLog"></div>
     <button class="action" id="copyBtn">Copy the recap</button>
     <button class="action warn" id="closeBtn">Close out the night</button>
-    <p class="hint">Closing out clears the sales list. Your stock counts stay put.</p>
+    <button class="action" id="exportBtn">Export inventory and history</button>
+    <p class="hint">Closing out starts a new sales list. Past sales stay in the activity log; stock counts stay put.</p>
   </div>
 </section>
 
-<div id="toast"><span id="toastMsg"></span><button id="undoBtn">Undo</button></div>
+</main>
 
 <nav>
   <button data-view="sell" aria-current="true">Sell</button>
@@ -214,324 +229,7 @@
   <button data-view="night">Night</button>
 </nav>
 
-<script>
-const SIZES = ["S","M","L","XL","2XL","3XL","4XL"];
-const KEY = "hp-merch-v1";
-
-const STYLES = [
-  {id:"pink",  name:"Pink Hottt Probs Shirt",    short:"Pink HP",   fit:"regular"},
-  {id:"dinot", name:"Dino Regular Black",        short:"Dino tee",  fit:"regular"},
-  {id:"blkhp", name:"Black Hottt Probs Regular", short:"Black HP",  fit:"regular"},
-  {id:"dinoc", name:"Dino Crop Black",           short:"Dino crop", fit:"crop"},
-  {id:"hpcrop",name:"HP Crop Black",             short:"HP crop",   fit:"crop"},
-  {id:"redtk", name:"Red HP Tank",               short:"Red tank",  fit:"tank"},
-  {id:"dinotk",name:"Dino Tank Black",           short:"Dino tank", fit:"tank"},
-];
-
-const OPENING = {
-  //      S  M  L XL 2XL 3XL 4XL
-  pink:  [5, 1, 9, 2, 0, 0, 0],
-  dinot: [8, 7, 3, 6, 0, 0, 0],
-  blkhp: [9, 8, 8,13,10, 0, 0],
-  dinoc: [2, 7, 8, 6, 0, 0, 0],
-  hpcrop:[0, 0, 1, 1, 0, 0, 0],
-  redtk: [1, 3, 1, 3, 0, 0, 0],
-  dinotk:[4, 3, 2, 1, 0, 0, 0],
-};
-
-// ===== PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BETWEEN THE QUOTES =====
-const SYNC_URL = "https://script.google.com/macros/s/AKfycbyesIiiQKpg8DBEi-WMVyH7kSw-y6y0ILCUGCIkR8cB5b7o_OmTPSBsLIZHWiUF9Dtj/exec";
-// Leave it empty and the app runs exactly as before: local only, no network.
-
-let state = null;
-let sel = STYLES[0].id;      // selected style on Sell tab
-let selSize = "S";           // selected size on Stock tab
-let lastSale = null;
-let toastTimer = null;
-
-function freshState(){
-  const stock = {};
-  STYLES.forEach(s => {
-    stock[s.id] = {};
-    SIZES.forEach((z,i) => stock[s.id][z] = OPENING[s.id][i]);
-  });
-  return {stock, sales:[]};
-}
-
-async function load(){
-  try{
-    state = JSON.parse(localStorage.getItem(KEY));
-    if(!state || !state.stock) throw new Error("no saved data");
-    // fill any gaps if the catalog changed
-    STYLES.forEach(s=>{
-      state.stock[s.id] = state.stock[s.id] || {};
-      SIZES.forEach(z=>{ if(typeof state.stock[s.id][z]!=="number") state.stock[s.id][z]=0; });
-    });
-    state.sales = state.sales || [];
-  }catch(e){
-    state = freshState();
-    save();
-  }
-  render();
-  paintSync();
-  if(SYNC_URL) await pull();
-}
-
-let saveTimer = null, pushTimer = null, dirty = false, syncing = false, lastSync = null;
-
-function save(){
-  state.updatedAt = Date.now();
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(()=>{
-    try{ localStorage.setItem(KEY, JSON.stringify(state)); }
-    catch(e){ console.error("Couldn't save:", e); }
-  }, 250);
-  if(SYNC_URL){
-    dirty = true; paintSync();
-    clearTimeout(pushTimer);
-    pushTimer = setTimeout(push, 2500);
-  }
-}
-
-/* ---------- sync ---------- */
-function paintSync(){
-  const bar = document.getElementById("syncBar");
-  if(!SYNC_URL){ bar.hidden = true; return; }
-  bar.hidden = false;
-  const msg = document.getElementById("syncMsg");
-  bar.className = "";
-  if(syncing){ bar.className = "busy"; msg.textContent = "Syncing\u2026"; return; }
-  if(!navigator.onLine){ bar.className = "bad"; msg.textContent = dirty ? "Offline \u2014 changes saved on this phone" : "Offline"; return; }
-  if(dirty){ bar.className = "busy"; msg.textContent = "Not backed up yet"; return; }
-  bar.className = "ok";
-  msg.textContent = lastSync ? "Synced " + ago(lastSync) : "Synced";
-}
-
-function ago(t){
-  const s = Math.round((Date.now()-t)/1000);
-  if(s < 45) return "just now";
-  if(s < 5400) return Math.round(s/60) + "m ago";
-  return Math.round(s/3600) + "h ago";
-}
-
-async function push(){
-  if(!SYNC_URL || syncing || !navigator.onLine) return;
-  syncing = true; paintSync();
-  try{
-    await fetch(SYNC_URL, {method:"POST", body: JSON.stringify(state)});
-    dirty = false; lastSync = Date.now();
-  }catch(e){ console.error("Push failed:", e); }
-  syncing = false; paintSync();
-}
-
-async function pull(){
-  if(!SYNC_URL || syncing || !navigator.onLine) return;
-  syncing = true; paintSync();
-  try{
-    const r = await fetch(SYNC_URL + "?t=" + Date.now());
-    const remote = await r.json();
-    if(remote && remote.stock && (remote.updatedAt||0) > (state.updatedAt||0)){
-      state = remote;
-      localStorage.setItem(KEY, JSON.stringify(state));
-      render();
-    }
-    lastSync = Date.now();
-  }catch(e){ console.error("Pull failed:", e); }
-  syncing = false; paintSync();
-}
-
-document.getElementById("syncNow").onclick = async ()=>{
-  if(dirty) await push(); else await pull();
-};
-window.addEventListener("online", ()=>{ paintSync(); if(dirty) push(); else pull(); });
-window.addEventListener("offline", paintSync);
-document.addEventListener("visibilitychange", ()=>{
-  if(document.visibilityState === "visible"){ if(dirty) push(); else pull(); }
-});
-setInterval(paintSync, 30000);
-
-/* ---------- helpers ---------- */
-const styleById = id => STYLES.find(s=>s.id===id);
-const styleTotal = id => SIZES.reduce((a,z)=>a+state.stock[id][z],0);
-const grandTotal = () => STYLES.reduce((a,s)=>a+styleTotal(s.id),0);
-const fitTotal = fit => STYLES.filter(s=>s.fit===fit).reduce((a,s)=>a+styleTotal(s.id),0);
-const soldCount = () => state.sales.length;
-const clock = t => new Date(t).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
-
-/* ---------- render ---------- */
-function render(){
-  document.getElementById("soldN").textContent = soldCount();
-  document.getElementById("leftN").textContent = grandTotal();
-  renderChips(); renderSizes(); renderStock(); renderLog();
-}
-
-function renderChips(){
-  const box = document.getElementById("styleChips");
-  box.innerHTML = "";
-  STYLES.forEach(s=>{
-    const n = styleTotal(s.id);
-    const b = document.createElement("button");
-    b.className = "chip" + (n===0 ? " empty":"");
-    b.setAttribute("aria-pressed", s.id===sel);
-    b.innerHTML = s.short + '<span class="n">' + n + '</span>';
-    b.onclick = ()=>{ sel = s.id; renderChips(); renderSizes(); };
-    box.appendChild(b);
-  });
-}
-
-function renderSizes(){
-  const grid = document.getElementById("sizeGrid");
-  grid.innerHTML = "";
-  SIZES.forEach(z=>{
-    const n = state.stock[sel][z];
-    const b = document.createElement("button");
-    b.className = "size" + (n>0 && n<=2 ? " low":"");
-    b.innerHTML = '<span class="lbl">'+z+'</span><span class="qty">'+n+'</span>';
-    if(n===0){ b.disabled = true; }
-    else b.onclick = ()=> sell(sel, z);
-    grid.appendChild(b);
-  });
-}
-
-function renderStock(){
-  const head = document.getElementById("sizeHead");
-  head.innerHTML = "";
-  SIZES.forEach(z=>{
-    const b = document.createElement("button");
-    b.textContent = z;
-    b.setAttribute("aria-pressed", z===selSize);
-    b.onclick = ()=>{ selSize = z; renderStock(); };
-    head.appendChild(b);
-  });
-
-  const rows = document.getElementById("stockRows");
-  rows.innerHTML = "";
-  STYLES.forEach(s=>{
-    const row = document.createElement("div");
-    row.className = "row";
-    row.innerHTML = '<div class="name">'+s.name+'<em>'+styleTotal(s.id)+' across all sizes</em></div>';
-    const st = document.createElement("div");
-    st.className = "stepper";
-    const minus = document.createElement("button"); minus.textContent = "–";
-    minus.setAttribute("aria-label","One fewer "+s.short+" "+selSize);
-    const val = document.createElement("span"); val.className="val"; val.textContent = state.stock[s.id][selSize];
-    const plus = document.createElement("button"); plus.textContent = "+";
-    plus.setAttribute("aria-label","One more "+s.short+" "+selSize);
-    minus.onclick = ()=>{ if(state.stock[s.id][selSize]>0){ state.stock[s.id][selSize]--; save(); render(); } };
-    plus.onclick  = ()=>{ state.stock[s.id][selSize]++; save(); render(); };
-    st.append(minus, val, plus);
-    row.appendChild(st);
-    rows.appendChild(row);
-  });
-
-  document.getElementById("stockTotals").innerHTML =
-    '<div><b>'+fitTotal("regular")+'</b>regular fit</div>' +
-    '<div><b>'+fitTotal("crop")+'</b>crops</div>' +
-    '<div><b>'+fitTotal("tank")+'</b>tanks</div>' +
-    '<div><b>'+grandTotal()+'</b>everything</div>';
-}
-
-function renderLog(){
-  const box = document.getElementById("saleLog");
-  box.innerHTML = "";
-  if(!state.sales.length){
-    box.innerHTML = '<p class="empty">Nothing sold yet. Head to Sell and start ringing people up.</p>';
-    return;
-  }
-  [...state.sales].reverse().forEach(x=>{
-    const row = document.createElement("div");
-    row.className = "sale";
-    row.innerHTML = '<time>'+clock(x.t)+'</time><span class="sz">'+x.size+
-                    '</span><span class="nm">'+styleById(x.styleId).short+'</span>';
-    const v = document.createElement("button");
-    v.className = "void"; v.textContent = "void";
-    v.onclick = ()=> voidSale(x.t);
-    row.appendChild(v);
-    box.appendChild(row);
-  });
-}
-
-/* ---------- actions ---------- */
-function sell(styleId, size){
-  if(state.stock[styleId][size] <= 0) return;
-  state.stock[styleId][size]--;
-  const rec = {t: Date.now(), styleId, size};
-  state.sales.push(rec);
-  lastSale = rec;
-  save(); render();
-  showToast(styleById(styleId).short + " " + size + " sold");
-  if(navigator.vibrate) navigator.vibrate(12);
-}
-
-function voidSale(t){
-  const i = state.sales.findIndex(x=>x.t===t);
-  if(i<0) return;
-  const [rec] = state.sales.splice(i,1);
-  state.stock[rec.styleId][rec.size]++;
-  if(lastSale && lastSale.t===t) hideToast();
-  save(); render();
-}
-
-function showToast(msg){
-  document.getElementById("toastMsg").textContent = msg;
-  document.getElementById("toast").classList.add("on");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, 6000);
-}
-function hideToast(){
-  document.getElementById("toast").classList.remove("on");
-  clearTimeout(toastTimer);
-}
-document.getElementById("undoBtn").onclick = ()=>{ if(lastSale) voidSale(lastSale.t); hideToast(); };
-
-/* ---------- nav ---------- */
-document.querySelectorAll("nav button").forEach(b=>{
-  b.onclick = ()=>{
-    document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-current", x===b));
-    document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on", v.id==="v-"+b.dataset.view));
-    window.scrollTo(0,0);
-  };
-});
-
-/* ---------- recap + close out ---------- */
-function recapText(){
-  const byStyle = {};
-  state.sales.forEach(x=>{
-    const k = styleById(x.styleId).name + " " + x.size;
-    byStyle[k] = (byStyle[k]||0) + 1;
-  });
-  const lines = Object.entries(byStyle)
-    .sort((a,b)=>b[1]-a[1])
-    .map(([k,v])=> v + " × " + k);
-  return "HOTTT PROBS — " + new Date().toLocaleDateString() +
-    "\n" + soldCount() + " pieces sold" +
-    "\n\n" + lines.join("\n") +
-    "\n\nLeft in the tubs: " + grandTotal();
-}
-
-document.getElementById("copyBtn").onclick = async (e)=>{
-  const t = recapText();
-  try{ await navigator.clipboard.writeText(t); e.target.textContent = "Copied"; }
-  catch(err){ e.target.textContent = "Couldn't copy — screenshot the list instead"; }
-  setTimeout(()=> e.target.textContent = "Copy the recap", 2200);
-};
-
-document.getElementById("closeBtn").onclick = (e)=>{
-  if(!state.sales.length){ return; }
-  if(e.target.dataset.armed){
-    state.sales = []; lastSale = null;
-    delete e.target.dataset.armed;
-    e.target.textContent = "Close out the night";
-    hideToast(); save(); render();
-  }else{
-    e.target.dataset.armed = "1";
-    e.target.textContent = "Tap again to clear " + soldCount() + " sales";
-    setTimeout(()=>{
-      delete e.target.dataset.armed;
-      e.target.textContent = "Close out the night";
-    }, 5000);
-  }
-};
-
-load();
-</script>
+<script src="config.js"></script>
+<script src="apps-script/Inventory.js"></script>
+<script src="sync.js"></script>
+<script src="app.js"></script>
