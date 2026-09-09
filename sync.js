@@ -43,9 +43,15 @@ var MerchSync = class {
           this.accept(result.state);this.storage.removeItem(entry.key);this.healthy=true;this.message=result.message;return;
         } else {throw Error(result.message || 'Save not confirmed. Retry.');}
       }
+      if(entries.length) {
+        // Each apply response already contains authoritative state computed
+        // while holding the write lock. A second read doubles Apps Script
+        // latency and creates needless contention between devices.
+        this.healthy=true;this.message='Saved';return;
+      }
       const result=await this.request('read');
       if(!result.ok)throw Error(result.message || 'Could not load inventory.');
-      this.accept(result.state);this.healthy=true;this.message='Saved · inventory refreshed';
+      this.accept(result.state);this.healthy=true;this.message='Inventory refreshed';
     } catch(err) {
       this.healthy=false;this.message=err.name==='AbortError'?'Request timed out. Retry to check whether it saved.':err.message;
     } finally {this.busy=false;this.emit();}
