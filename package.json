@@ -1,0 +1,16 @@
+{
+  "name": "hotttprobs-pilot",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check app.js && node --check sync.js && node --check apps-script/Inventory.js && node --test tests/*.test.cjs",
+    "preview": "node scripts/serve.cjs",
+    "build": "node scripts/build.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@google/clasp": "3.4.1"
+  }
+}
