@@ -4,9 +4,10 @@ Use only the new pilot deployment and sample inventory. Node tests must pass fir
 
 - [x] Fresh browser: locked screen shows no guessed inventory. Correct passphrase loads the Sheet's actual counts; an incorrect one returns no data.
 - [x] Inspect network: only the new configured endpoint is contacted. POST responses are readable JSON after Google redirects. No passphrase appears in a URL.
-- [ ] Phone usability: select a style and size, record a sale, void it, adjust stock, switch tabs, copy recap, and export. Verify export and clipboard behavior on iPhone/Safari and Android/Chrome when available.
+- [ ] Phone usability: select a style and size, record a sale, void it, draft several stock changes, save them together, switch tabs, copy recap, and export. Verify export and clipboard behavior on iPhone/Safari and Android/Chrome when available.
 - [ ] Two devices: starting with at least two items, each sells one. Both sales remain; refresh shows a decrease of two.
 - [ ] Last item: both attempt to sell the last one. Only one succeeds; the other reports out of stock and refreshes.
+- [ ] Stock draft concurrency: leave a stock draft open, record a sale for the same item on another device, then save the draft. The sale and the relative stock change must both remain.
 - [ ] Lost response/slow connection: record one sale, interrupt the response, reconnect and retry. Exactly one sale appears in the Sheet. While a request is pending, further edits are disabled.
 - [ ] Reload with an uncertain request: unlock and retry; it is resolved exactly once. Do not clear localStorage.
 - [ ] Offline: already-open app disables new edits. A failed refresh does not display a successful save status. Reconnect refreshes normally.

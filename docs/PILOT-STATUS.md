@@ -16,7 +16,9 @@
 - Safari generated and downloaded `hp-inventory-2026-09-09.json`. A post-closeout export contained seven events, ended with a `close` event, contained no passphrase field, and replayed through `Inventory.replay` to 131 items and zero active sales, matching the live app.
 - The owner explicitly approved the live closeout test. Closing the sample gig cleared its one active sale for everyone and preserved the resulting stock count of 131. Prior activity remained in the export.
 - Logging out of the public app hid both inventory totals and the active-sales view and cleared the in-memory authenticated session.
-- Concurrent real browsers, actual phone testing, failure/retry cases, clipboard behavior, and a copied-Sheet handoff rehearsal remain pending.
+- The owner reports that two-device selling concurrency and phone usability are acceptable after the read-contention fix.
+- Batched stock drafts are covered by automated atomicity, concurrency, retry, and UI tests; the new stock workflow still needs live phone validation after deployment.
+- Failure/retry cases on venue-like connectivity, clipboard behavior, and a copied-Sheet handoff rehearsal remain pending.
 - No requests were sent to the band's original Apps Script backend.
 
 See `PILOT.md` for the remaining acceptance checks. The deployed site is ready for an isolated sample-data pilot; these results do not yet establish that it is ready for real sales.

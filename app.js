@@ -1,15 +1,18 @@
 "use strict";
 const {SIZES,STYLES} = Inventory;
 let state=null, sel=STYLES[0].id, selSize='S', exportUrl=null;
+let stockDraft={}, stockDraftOpId=null, stockSaving=false;
 const byId=id=>document.getElementById(id);
 const client=new MerchSync({endpoint:HP_CONFIG.endpoint,storage:localStorage,fetcher:fetch,uuid:()=>crypto.randomUUID(),onChange:update});
 function canEdit(){return navigator.onLine && client.ready();}
 function update(){
+ if(stockDraftOpId && client.lastAcknowledged===stockDraftOpId){stockDraft={};stockDraftOpId=null;stockSaving=false;}
+ if(stockDraftOpId && client.lastRejected===stockDraftOpId){stockDraftOpId=null;stockSaving=false;}
  state=client.state;
  byId('syncMsg').textContent=client.busy?'Checking and saving…':(!navigator.onLine?'Offline — reconnect before editing.':client.message);
  byId('syncBar').className=client.busy?'busy':client.healthy && navigator.onLine?'ok':'bad';
  byId('syncNow').disabled=client.busy || !client.passphrase || !navigator.onLine;
- byId('logoutBtn').disabled=client.busy;
+ byId('logoutBtn').disabled=client.busy || stockSaving;
  byId('unlockBtn').disabled=client.busy || !HP_CONFIG.endpoint;
  byId('inventory').hidden=!state;
  byId('unlockForm').hidden=!!state;
@@ -28,7 +31,13 @@ function update(){
 const styleById = id => STYLES.find(s=>s.id===id);
 const styleTotal = id => SIZES.reduce((a,z)=>a+state.stock[id][z],0);
 const grandTotal = () => STYLES.reduce((a,s)=>a+styleTotal(s.id),0);
-const fitTotal = fit => STYLES.filter(s=>s.fit===fit).reduce((a,s)=>a+styleTotal(s.id),0);
+const draftKey = (styleId,size) => styleId+':'+size;
+const draftEntries = () => Object.values(stockDraft);
+const draftDelta = (styleId,size) => stockDraft[draftKey(styleId,size)]?.delta || 0;
+const draftStock = (styleId,size) => state.stock[styleId][size]+draftDelta(styleId,size);
+const draftStyleTotal = id => SIZES.reduce((a,z)=>a+draftStock(id,z),0);
+const draftFitTotal = fit => STYLES.filter(s=>s.fit===fit).reduce((a,s)=>a+draftStyleTotal(s.id),0);
+const draftGrandTotal = () => STYLES.reduce((a,s)=>a+draftStyleTotal(s.id),0);
 const soldCount = () => state.sales.length;
 const clock = t => new Date(t).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 
@@ -72,7 +81,9 @@ function renderStock(){
   head.innerHTML = "";
   SIZES.forEach(z=>{
     const b = document.createElement("button");
-    b.textContent = z;
+    const changed=draftEntries().filter(x=>x.size===z).length;
+    b.innerHTML = z+(changed?'<span class="draft-badge">'+changed+'</span>':'');
+    if(changed)b.setAttribute("aria-label",z+", "+changed+" unsaved "+(changed===1?'change':'changes'));
     b.setAttribute("aria-pressed", z===selSize);
     b.onclick = ()=>{ selSize = z; renderStock(); };
     head.appendChild(b);
@@ -83,28 +94,43 @@ function renderStock(){
   STYLES.forEach(s=>{
     const row = document.createElement("div");
     row.className = "row";
-    row.innerHTML = '<div class="name">'+s.name+'<em>'+styleTotal(s.id)+' across all sizes</em></div>';
+    row.innerHTML = '<div class="name">'+s.name+'<em>'+draftStyleTotal(s.id)+' across all sizes</em></div>';
     const st = document.createElement("div");
     st.className = "stepper";
     const minus = document.createElement("button"); minus.textContent = "–";
     minus.setAttribute("aria-label","One fewer "+s.short+" "+selSize);
-    const val = document.createElement("span"); val.className="val"; val.textContent = state.stock[s.id][selSize];
+    const shown=draftStock(s.id,selSize), changed=draftDelta(s.id,selSize)!==0;
+    const val = document.createElement("span"); val.className="val"+(changed?' changed':'')+(shown<0?' invalid':''); val.textContent = shown;
     const plus = document.createElement("button"); plus.textContent = "+";
     plus.setAttribute("aria-label","One more "+s.short+" "+selSize);
-    minus.disabled = !canEdit() || state.stock[s.id][selSize] <= 0;
-    minus.onclick = ()=> adjust(s.id, selSize, -1);
-    plus.disabled = !canEdit();
-    plus.onclick = ()=> adjust(s.id, selSize, 1);
+    minus.disabled = stockSaving || !!stockDraftOpId || shown <= 0;
+    minus.onclick = ()=> changeStockDraft(s.id, selSize, -1);
+    plus.disabled = stockSaving || !!stockDraftOpId || shown >= 1000000;
+    plus.onclick = ()=> changeStockDraft(s.id, selSize, 1);
     st.append(minus, val, plus);
     row.appendChild(st);
     rows.appendChild(row);
   });
 
   document.getElementById("stockTotals").innerHTML =
-    '<div><b>'+fitTotal("regular")+'</b>regular fit</div>' +
-    '<div><b>'+fitTotal("crop")+'</b>crops</div>' +
-    '<div><b>'+fitTotal("tank")+'</b>tanks</div>' +
-    '<div><b>'+grandTotal()+'</b>everything</div>';
+    '<div><b>'+draftFitTotal("regular")+'</b>regular fit</div>' +
+    '<div><b>'+draftFitTotal("crop")+'</b>crops</div>' +
+    '<div><b>'+draftFitTotal("tank")+'</b>tanks</div>' +
+    '<div><b>'+draftGrandTotal()+'</b>everything</div>';
+
+  const changes=draftEntries(), bar=byId('stockDraftBar');
+  byId('stockNavBtn').textContent=changes.length?'Stock •':'Stock';
+  byId('stockNavBtn').classList.toggle('has-draft',!!changes.length);
+  byId('stockNavBtn').setAttribute('aria-label',changes.length?'Stock, unsaved changes':'Stock');
+  bar.hidden=!changes.length;
+  if(changes.length){
+    byId('stockDraftTitle').textContent=stockDraftOpId?'Stock save pending':changes.length+' unsaved '+(changes.length===1?'change':'changes');
+    const detail=changes.map(x=>styleById(x.styleId).short+' '+x.size+' '+(x.delta>0?'+':'−')+Math.abs(x.delta)).join(', ');
+    byId('stockDraftSummary').textContent=(stockDraftOpId?'Waiting for confirmation. ':'')+detail;
+    byId('stockSaveBtn').textContent=stockSaving?'Saving…':'Save '+changes.length+' '+(changes.length===1?'change':'changes');
+    byId('stockSaveBtn').disabled=stockSaving || !!stockDraftOpId || !canEdit();
+    byId('stockDiscardBtn').disabled=stockSaving || !!stockDraftOpId;
+  }
 }
 
 function renderLog(){
@@ -129,7 +155,24 @@ function renderLog(){
 }
 
 async function sell(styleId,size){if(canEdit())await client.submit({type:'sale',styleId,size});}
-async function adjust(styleId,size,delta){if(canEdit())await client.submit({type:'adjust',styleId,size,delta});}
+function changeStockDraft(styleId,size,delta){
+  if(!state || stockSaving || stockDraftOpId)return;
+  const key=draftKey(styleId,size), next=draftDelta(styleId,size)+delta;
+  const shown=state.stock[styleId][size]+next;
+  if(shown<0 || shown>1000000)return;
+  if(next)stockDraft[key]={styleId,size,delta:next};else delete stockDraft[key];
+  renderStock();
+}
+async function saveStockDraft(){
+  const changes=draftEntries().map(x=>({...x}));
+  if(!changes.length || !canEdit() || stockSaving || stockDraftOpId)return;
+  stockSaving=true;renderStock();
+  const saved=await client.submit({type:'adjustBatch',changes});
+  stockSaving=false;
+  if(saved)stockDraft={};
+  else if(client.lastSubmissionId && client.pending().some(x=>x.op.id===client.lastSubmissionId))stockDraftOpId=client.lastSubmissionId;
+  renderStock();
+}
 async function voidSale(saleId){if(canEdit())await client.submit({type:'void',saleId});}
 byId('unlockForm').onsubmit=async e=>{
   e.preventDefault();const input=byId('passphrase');const value=input.value;input.value='';
@@ -137,6 +180,8 @@ byId('unlockForm').onsubmit=async e=>{
 };
 byId('logoutBtn').onclick=()=>client.logout();
 byId('syncNow').onclick=()=>client.refresh();
+byId('stockSaveBtn').onclick=saveStockDraft;
+byId('stockDiscardBtn').onclick=()=>{if(!stockSaving && !stockDraftOpId){stockDraft={};renderStock();}};
 byId('closeBtn').onclick=async()=>{
   if(canEdit() && confirm('Close this gig for everyone? Its sales will remain in the exported history.'))await client.submit({type:'close'});
 };
@@ -167,6 +212,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 window.addEventListener('offline',update);
 window.addEventListener('online',()=>client.refresh());
 window.addEventListener('storage',()=>client.refresh());
+window.addEventListener('beforeunload',e=>{if(draftEntries().length && !stockDraftOpId){e.preventDefault();e.returnValue='';}});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')client.refresh();});
 byId('pilotLabel').textContent=HP_CONFIG.label;
 if(!HP_CONFIG.endpoint){byId('setupHint').textContent='Pilot setup is in progress. The owner needs to connect the new backend.';byId('unlockBtn').disabled=true;}

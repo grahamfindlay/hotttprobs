@@ -7,7 +7,7 @@ function page(endpoint='https://script.google.com/macros/s/PILOT/exec') {
  let events,sequence=0;
  const c=vm.createContext({HP_CONFIG:{endpoint,label:'Pilot'},localStorage,AbortController,Blob,URL:{createObjectURL:()=> 'blob:test-backup',revokeObjectURL(){}},setTimeout,clearTimeout,setInterval(){},console,navigator:{onLine:true},window:{addEventListener(){},scrollTo(){}},document:{getElementById:id=>elements.get(id),createElement:element,querySelectorAll:()=>[],addEventListener(){},visibilityState:'visible'},crypto:{randomUUID:()=>String(++sequence).padStart(16,'0')},confirm:()=>true,fetch:async(url,options)=>{
  const req=JSON.parse(options.body);let result={ok:true};
- if(req.action==='apply'){const planned=c.Inventory.plan(events,req.operation,10);events.push(planned.event);result.ack=req.operation.id;}
+ if(req.action==='apply'){const planned=c.Inventory.plan(events,req.operation,10);if(planned.event)events.push(planned.event);result.ack=req.operation.id;}
  if(req.action==='export')result.events=events;
  result.state=c.Inventory.replay(events);return {ok:true,json:async()=>JSON.parse(JSON.stringify(result))};
  }});
@@ -30,4 +30,23 @@ test('UI unlocks, records a sale, voids by ID, and logs out',async()=>{
  await vm.runInContext("sell('pink','S')",p.c);assert.equal(p.elements.get('soldN').textContent,1);
  const row=p.elements.get('saleLog').children[0];await row.children[0].onclick();assert.equal(p.elements.get('soldN').textContent,0);
  p.elements.get('logoutBtn').onclick();assert.equal(p.elements.get('inventory').hidden,true);assert.equal(p.elements.get('leftN').textContent,'—');
+});
+test('stock steppers create a draft and Save sends one combined adjustment',async()=>{
+ const p=page();await p.unlock();
+ let row=p.elements.get('stockRows').children[0];row.children[0].children[2].onclick();
+ row=p.elements.get('stockRows').children[0];row.children[0].children[2].onclick();
+ assert.equal(p.events.length,1);assert.equal(p.elements.get('stockDraftBar').hidden,false);
+ assert.equal(p.elements.get('stockNavBtn').textContent,'Stock •');
+ assert.equal(p.elements.get('stockSaveBtn').textContent,'Save 1 change');
+ await p.elements.get('stockSaveBtn').onclick();
+ assert.equal(p.events.length,2);assert.equal(p.events[1].type,'adjustBatch');assert.equal(p.events[1].changes[0].delta,2);
+ row=p.elements.get('stockRows').children[0];assert.equal(p.elements.get('stockDraftBar').hidden,true);assert.equal(p.elements.get('stockNavBtn').textContent,'Stock');assert.equal(row.children[0].children[1].textContent,7);
+});
+test('an uncertain stock save remains visible until its idempotent retry is acknowledged',async()=>{
+ const p=page();await p.unlock();let row=p.elements.get('stockRows').children[0];row.children[0].children[2].onclick();
+ vm.runInContext("client.fetcher=async(...args)=>{await fetch(...args);throw Error('response lost')}",p.c);
+ await p.elements.get('stockSaveBtn').onclick();
+ assert.equal(p.events.length,2);assert.equal(p.elements.get('stockDraftBar').hidden,false);assert.equal(p.elements.get('stockDraftTitle').textContent,'Stock save pending');
+ vm.runInContext("client.fetcher=(...args)=>fetch(...args)",p.c);await p.elements.get('syncNow').onclick();
+ assert.equal(p.events.length,2);assert.equal(p.elements.get('stockDraftBar').hidden,true);
 });
